@@ -24,7 +24,7 @@ def save(data):
 data = load()
 
 # =========================
-# AUTOCOMPLETE (DROPDOWN)
+# AUTOCOMPLETE
 # =========================
 async def rr_autocomplete(interaction, current):
     return [
@@ -41,18 +41,14 @@ async def embed_autocomplete(interaction, current):
     ][:25]
 
 # =========================
-# FULL MODAL
+# MODAL
 # =========================
 class FullModal(discord.ui.Modal):
     def __init__(self, title_name, defaults=None):
         super().__init__(title=title_name)
         defaults = defaults or {}
 
-        self.title_input = discord.ui.TextInput(
-            label="Title",
-            default=defaults.get("title", ""),
-            required=False
-        )
+        self.title_input = discord.ui.TextInput(label="Title", default=defaults.get("title", ""), required=False)
 
         self.description = discord.ui.TextInput(
             label="Description",
@@ -61,23 +57,9 @@ class FullModal(discord.ui.Modal):
             required=False
         )
 
-        self.color = discord.ui.TextInput(
-            label="Color (#FFFFFF)",
-            default=defaults.get("color", "#FFFFFF"),
-            required=False
-        )
-
-        self.image = discord.ui.TextInput(
-            label="Image URL",
-            default=defaults.get("image", ""),
-            required=False
-        )
-
-        self.thumbnail = discord.ui.TextInput(
-            label="Thumbnail URL",
-            default=defaults.get("thumbnail", ""),
-            required=False
-        )
+        self.color = discord.ui.TextInput(label="Color (#FFFFFF)", default=defaults.get("color", "#FFFFFF"), required=False)
+        self.image = discord.ui.TextInput(label="Image URL", default=defaults.get("image", ""), required=False)
+        self.thumbnail = discord.ui.TextInput(label="Thumbnail URL", default=defaults.get("thumbnail", ""), required=False)
 
         self.add_item(self.title_input)
         self.add_item(self.description)
@@ -107,7 +89,15 @@ async def on_ready():
 # REACTION ROLES
 # =========================
 @bot.tree.command(name="reactionroles_create")
-async def rr_create(interaction: discord.Interaction, name: str):
+async def rr_create(
+    interaction: discord.Interaction,
+    name: str,
+    emoji1: str, role1: discord.Role,
+    emoji2: str = None, role2: discord.Role = None,
+    emoji3: str = None, role3: discord.Role = None,
+    emoji4: str = None, role4: discord.Role = None,
+    emoji5: str = None, role5: discord.Role = None,
+):
 
     modal = FullModal("Create Reaction Roles")
     await interaction.response.send_modal(modal)
@@ -115,13 +105,18 @@ async def rr_create(interaction: discord.Interaction, name: str):
 
     v = modal.value
 
+    roles = {}
+    for e, r in [(emoji1, role1),(emoji2, role2),(emoji3, role3),(emoji4, role4),(emoji5, role5)]:
+        if e and r:
+            roles[e] = r.id
+
     data["roles"][name] = {
         "title": v["title"],
         "description": v["description"],
         "color": int(v["color"].replace("#",""),16) if v["color"] else 0xFFFFFF,
         "image": v["image"],
         "thumbnail": v["thumbnail"],
-        "roles": {},
+        "roles": roles,
         "messages": []
     }
 
@@ -142,6 +137,9 @@ async def rr_send(interaction: discord.Interaction, name: str, channel: discord.
         embed.set_thumbnail(url=cfg["thumbnail"])
 
     msg = await channel.send(embed=embed)
+
+    for emoji in cfg["roles"]:
+        await msg.add_reaction(emoji)
 
     cfg["messages"].append({"channel": channel.id, "message": msg.id})
     save(data)
@@ -187,6 +185,9 @@ async def rr_edit(interaction: discord.Interaction, name: str):
                 embed.set_thumbnail(url=cfg["thumbnail"])
 
             await msg.edit(embed=embed)
+            await msg.clear_reactions()
+            for emoji in cfg["roles"]:
+                await msg.add_reaction(emoji)
         except:
             pass
 
@@ -329,6 +330,37 @@ async def embed_delete(interaction: discord.Interaction, name: str):
 async def embed_list(interaction: discord.Interaction):
     names = list(data["embeds"].keys())
     await interaction.response.send_message("\n".join(names) if names else "None", ephemeral=True)
+
+# =========================
+# REACTION EVENTS
+# =========================
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.user_id == bot.user.id:
+        return
+
+    for cfg in data["roles"].values():
+        for m in cfg["messages"]:
+            if m["message"] == payload.message_id:
+                guild = bot.get_guild(payload.guild_id)
+                member = guild.get_member(payload.user_id)
+
+                role_id = cfg["roles"].get(str(payload.emoji))
+                if role_id:
+                    await member.add_roles(guild.get_role(role_id))
+
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    for cfg in data["roles"].values():
+        for m in cfg["messages"]:
+            if m["message"] == payload.message_id:
+                guild = bot.get_guild(payload.guild_id)
+                member = guild.get_member(payload.user_id)
+
+                role_id = cfg["roles"].get(str(payload.emoji))
+                if role_id:
+                    await member.remove_roles(guild.get_role(role_id))
 
 # =========================
 # RUN
