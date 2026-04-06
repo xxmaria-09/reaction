@@ -35,7 +35,7 @@ async def on_ready():
 
 
 # =========================
-# CREATE
+# CREATE CONFIG
 # =========================
 @bot.tree.command(name="reactionroles_create")
 async def create_rr(
@@ -52,52 +52,51 @@ async def create_rr(
     emoji4: str = None,
     role4: discord.Role = None,
     emoji5: str = None,
-    role5: discord.Role = None
+    role5: discord.Role = None,
+    image: str = None,
+    thumbnail: str = None
 ):
-
     roles_data = {}
-    desc = description
-
     pairs = [(emoji1, role1), (emoji2, role2), (emoji3, role3), (emoji4, role4), (emoji5, role5)]
 
     for emoji, role in pairs:
         if emoji and role:
             roles_data[emoji] = role.id
-            desc += f"\n{emoji} → {role.name}"
 
     data[name] = {
         "title": title,
         "description": description,
-        "roles": roles_data
+        "roles": roles_data,
+        "image": image,
+        "thumbnail": thumbnail
     }
 
     save_data(data)
-
     await interaction.response.send_message(f"✅ Created `{name}`", ephemeral=True)
 
 
 # =========================
-# SEND
+# SEND CONFIG
 # =========================
 @bot.tree.command(name="reactionroles_send")
 async def send_rr(interaction: discord.Interaction, name: str, channel: discord.TextChannel):
 
     if name not in data:
-        await interaction.response.send_message("❌ Not found", ephemeral=True)
+        await interaction.response.send_message("❌ Config not found", ephemeral=True)
         return
 
     cfg = data[name]
 
-    desc = cfg["description"]
-    for emoji, role_id in cfg["roles"].items():
-        role = interaction.guild.get_role(role_id)
-        desc += f"\n{emoji} → {role.name}"
-
     embed = discord.Embed(
         title=cfg["title"],
-        description=desc,
-        color=0xFFFFFF  # 🤍 WHITE
+        description=cfg["description"],
+        color=0xFFFFFF
     )
+
+    if cfg.get("image"):
+        embed.set_image(url=cfg["image"])
+    if cfg.get("thumbnail"):
+        embed.set_thumbnail(url=cfg["thumbnail"])
 
     msg = await channel.send(embed=embed)
 
@@ -112,7 +111,7 @@ async def send_rr(interaction: discord.Interaction, name: str, channel: discord.
 
 
 # =========================
-# EDIT
+# EDIT CONFIG
 # =========================
 @bot.tree.command(name="reactionroles_edit")
 async def edit_rr(
@@ -129,55 +128,56 @@ async def edit_rr(
     emoji4: str = None,
     role4: discord.Role = None,
     emoji5: str = None,
-    role5: discord.Role = None
+    role5: discord.Role = None,
+    image: str = None,
+    thumbnail: str = None
 ):
 
     if name not in data:
-        await interaction.response.send_message("❌ Not found", ephemeral=True)
+        await interaction.response.send_message("❌ Config not found", ephemeral=True)
         return
 
     if title:
         data[name]["title"] = title
-
     if description:
         data[name]["description"] = description
+    if image is not None:
+        data[name]["image"] = image
+    if thumbnail is not None:
+        data[name]["thumbnail"] = thumbnail
 
+    # update roles if provided
     pairs = [(emoji1, role1), (emoji2, role2), (emoji3, role3), (emoji4, role4), (emoji5, role5)]
-
     new_roles = {}
-
     for emoji, role in pairs:
         if emoji and role:
             new_roles[emoji] = role.id
-
     if new_roles:
         data[name]["roles"] = new_roles
 
     save_data(data)
 
-    # update message
+    # Auto-update message if sent
     if "message_id" in data[name]:
         try:
             channel = bot.get_channel(data[name]["channel_id"])
             msg = await channel.fetch_message(data[name]["message_id"])
 
-            desc = data[name]["description"]
-            for emoji, role_id in data[name]["roles"].items():
-                role = interaction.guild.get_role(role_id)
-                desc += f"\n{emoji} → {role.name}"
-
             embed = discord.Embed(
                 title=data[name]["title"],
-                description=desc,
+                description=data[name]["description"],
                 color=0xFFFFFF
             )
 
+            if data[name].get("image"):
+                embed.set_image(url=data[name]["image"])
+            if data[name].get("thumbnail"):
+                embed.set_thumbnail(url=data[name]["thumbnail"])
+
             await msg.edit(embed=embed)
             await msg.clear_reactions()
-
             for emoji in data[name]["roles"]:
                 await msg.add_reaction(emoji)
-
         except:
             pass
 
@@ -185,7 +185,7 @@ async def edit_rr(
 
 
 # =========================
-# DELETE
+# DELETE CONFIG
 # =========================
 @bot.tree.command(name="reactionroles_delete")
 async def delete_rr(interaction: discord.Interaction, name: str):
@@ -209,7 +209,7 @@ async def delete_rr(interaction: discord.Interaction, name: str):
 
 
 # =========================
-# LIST
+# LIST CONFIGS
 # =========================
 @bot.tree.command(name="reactionroles_list")
 async def list_rr(interaction: discord.Interaction):
@@ -219,7 +219,6 @@ async def list_rr(interaction: discord.Interaction):
         return
 
     msg = "**Your Reaction Role Systems:**\n"
-
     for name in data:
         msg += f"\n• {name}"
 
@@ -227,7 +226,7 @@ async def list_rr(interaction: discord.Interaction):
 
 
 # =========================
-# REACTIONS
+# REACTION HANDLING
 # =========================
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -235,10 +234,8 @@ async def on_raw_reaction_add(payload):
         if cfg.get("message_id") == payload.message_id:
             guild = bot.get_guild(payload.guild_id)
             member = guild.get_member(payload.user_id)
-
             if member.bot:
                 return
-
             role_id = cfg["roles"].get(str(payload.emoji))
             if role_id:
                 await member.add_roles(guild.get_role(role_id))
@@ -250,7 +247,6 @@ async def on_raw_reaction_remove(payload):
         if cfg.get("message_id") == payload.message_id:
             guild = bot.get_guild(payload.guild_id)
             member = guild.get_member(payload.user_id)
-
             role_id = cfg["roles"].get(str(payload.emoji))
             if role_id:
                 await member.remove_roles(guild.get_role(role_id))
