@@ -80,15 +80,19 @@ class FullModal(discord.ui.Modal):
 # =========================
 # READY + FORCE SYNC
 # =========================
-@bot.event
-async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} commands")
-    except Exception as e:
-        print(e)
+    GUILD_ID = 1448390622888198278  # replace this
 
-    print("Bot Ready")
+    @bot.event
+    async def on_ready():
+        try:
+            guild = discord.Object(id=GUILD_ID)
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            print(f"Synced {len(synced)} commands to guild")
+        except Exception as e:
+            print(e)
+
+        print("Bot Ready")
 
 # =========================
 # REACTION ROLES
