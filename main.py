@@ -24,13 +24,21 @@ def save(data):
 data = load()
 
 # =========================
-# AUTOCOMPLETE
+# AUTOCOMPLETE (DROPDOWN)
 # =========================
 async def rr_autocomplete(interaction, current):
-    return [app_commands.Choice(name=k, value=k) for k in data["roles"] if current.lower() in k.lower()][:25]
+    return [
+        app_commands.Choice(name=k, value=k)
+        for k in data["roles"]
+        if current.lower() in k.lower()
+    ][:25]
 
 async def embed_autocomplete(interaction, current):
-    return [app_commands.Choice(name=k, value=k) for k in data["embeds"] if current.lower() in k.lower()][:25]
+    return [
+        app_commands.Choice(name=k, value=k)
+        for k in data["embeds"]
+        if current.lower() in k.lower()
+    ][:25]
 
 # =========================
 # FULL MODAL
@@ -96,7 +104,7 @@ async def on_ready():
     print("Bot Ready")
 
 # =========================
-# REACTION ROLES CREATE
+# REACTION ROLES
 # =========================
 @bot.tree.command(name="reactionroles_create")
 async def rr_create(interaction: discord.Interaction, name: str):
@@ -120,9 +128,7 @@ async def rr_create(interaction: discord.Interaction, name: str):
     save(data)
     await interaction.followup.send(f"✅ Created `{name}`", ephemeral=True)
 
-# =========================
-# REACTION ROLES SEND
-# =========================
+
 @bot.tree.command(name="reactionroles_send")
 @app_commands.autocomplete(name=rr_autocomplete)
 async def rr_send(interaction: discord.Interaction, name: str, channel: discord.TextChannel):
@@ -142,9 +148,7 @@ async def rr_send(interaction: discord.Interaction, name: str, channel: discord.
 
     await interaction.response.send_message("✅ Sent", ephemeral=True)
 
-# =========================
-# REACTION ROLES EDIT
-# =========================
+
 @bot.tree.command(name="reactionroles_edit")
 @app_commands.autocomplete(name=rr_autocomplete)
 async def rr_edit(interaction: discord.Interaction, name: str):
@@ -189,8 +193,32 @@ async def rr_edit(interaction: discord.Interaction, name: str):
     save(data)
     await interaction.followup.send("✅ Updated", ephemeral=True)
 
+
+@bot.tree.command(name="reactionroles_delete")
+@app_commands.autocomplete(name=rr_autocomplete)
+async def rr_delete(interaction: discord.Interaction, name: str):
+
+    for m in data["roles"][name]["messages"]:
+        try:
+            ch = bot.get_channel(m["channel"])
+            msg = await ch.fetch_message(m["message"])
+            await msg.delete()
+        except:
+            pass
+
+    del data["roles"][name]
+    save(data)
+
+    await interaction.response.send_message(f"🗑️ Deleted `{name}`", ephemeral=True)
+
+
+@bot.tree.command(name="reactionroles_list")
+async def rr_list(interaction: discord.Interaction):
+    names = list(data["roles"].keys())
+    await interaction.response.send_message("\n".join(names) if names else "None", ephemeral=True)
+
 # =========================
-# EMBED CREATE
+# EMBEDS
 # =========================
 @bot.tree.command(name="embed_create")
 async def embed_create(interaction: discord.Interaction, name: str):
@@ -213,9 +241,7 @@ async def embed_create(interaction: discord.Interaction, name: str):
     save(data)
     await interaction.followup.send(f"✅ Created `{name}`", ephemeral=True)
 
-# =========================
-# EMBED SEND
-# =========================
+
 @bot.tree.command(name="embed_send")
 @app_commands.autocomplete(name=embed_autocomplete)
 async def embed_send(interaction: discord.Interaction, name: str, channel: discord.TextChannel):
@@ -235,9 +261,7 @@ async def embed_send(interaction: discord.Interaction, name: str, channel: disco
 
     await interaction.response.send_message("✅ Sent", ephemeral=True)
 
-# =========================
-# EMBED EDIT
-# =========================
+
 @bot.tree.command(name="embed_edit")
 @app_commands.autocomplete(name=embed_autocomplete)
 async def embed_edit(interaction: discord.Interaction, name: str):
@@ -281,6 +305,30 @@ async def embed_edit(interaction: discord.Interaction, name: str):
 
     save(data)
     await interaction.followup.send("✅ Updated", ephemeral=True)
+
+
+@bot.tree.command(name="embed_delete")
+@app_commands.autocomplete(name=embed_autocomplete)
+async def embed_delete(interaction: discord.Interaction, name: str):
+
+    for m in data["embeds"][name]["messages"]:
+        try:
+            ch = bot.get_channel(m["channel"])
+            msg = await ch.fetch_message(m["message"])
+            await msg.delete()
+        except:
+            pass
+
+    del data["embeds"][name]
+    save(data)
+
+    await interaction.response.send_message(f"🗑️ Deleted `{name}`", ephemeral=True)
+
+
+@bot.tree.command(name="embed_list")
+async def embed_list(interaction: discord.Interaction):
+    names = list(data["embeds"].keys())
+    await interaction.response.send_message("\n".join(names) if names else "None", ephemeral=True)
 
 # =========================
 # RUN
