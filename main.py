@@ -24,202 +24,245 @@ def save(data):
 data = load()
 
 # =========================
+# AUTOCOMPLETE
+# =========================
+async def rr_autocomplete(interaction, current):
+    return [app_commands.Choice(name=k, value=k) for k in data["roles"] if current.lower() in k.lower()][:25]
+
+async def embed_autocomplete(interaction, current):
+    return [app_commands.Choice(name=k, value=k) for k in data["embeds"] if current.lower() in k.lower()][:25]
+
+# =========================
+# FULL MODAL
+# =========================
+class FullModal(discord.ui.Modal):
+    def __init__(self, title_name, defaults=None):
+        super().__init__(title=title_name)
+        defaults = defaults or {}
+
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            default=defaults.get("title", ""),
+            required=False
+        )
+
+        self.description = discord.ui.TextInput(
+            label="Description",
+            style=discord.TextStyle.paragraph,
+            default=defaults.get("description", ""),
+            required=False
+        )
+
+        self.color = discord.ui.TextInput(
+            label="Color (#FFFFFF)",
+            default=defaults.get("color", "#FFFFFF"),
+            required=False
+        )
+
+        self.image = discord.ui.TextInput(
+            label="Image URL",
+            default=defaults.get("image", ""),
+            required=False
+        )
+
+        self.thumbnail = discord.ui.TextInput(
+            label="Thumbnail URL",
+            default=defaults.get("thumbnail", ""),
+            required=False
+        )
+
+        self.add_item(self.title_input)
+        self.add_item(self.description)
+        self.add_item(self.color)
+        self.add_item(self.image)
+        self.add_item(self.thumbnail)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.value = {
+            "title": self.title_input.value,
+            "description": self.description.value,
+            "color": self.color.value,
+            "image": self.image.value,
+            "thumbnail": self.thumbnail.value
+        }
+        await interaction.response.defer()
+
+# =========================
 # READY
 # =========================
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"Logged in as {bot.user}")
+    print("Bot Ready")
 
 # =========================
-# REACTION ROLE CREATE
+# REACTION ROLES CREATE
 # =========================
 @bot.tree.command(name="reactionroles_create")
-async def rr_create(interaction: discord.Interaction, name: str, title: str, description: str,
-                    emoji1: str, role1: discord.Role,
-                    emoji2: str = None, role2: discord.Role = None,
-                    emoji3: str = None, role3: discord.Role = None,
-                    emoji4: str = None, role4: discord.Role = None,
-                    emoji5: str = None, role5: discord.Role = None,
-                    image: str = None, thumbnail: str = None, color: str = None):
+async def rr_create(interaction: discord.Interaction, name: str):
 
-    roles = {}
-    for e, r in [(emoji1, role1),(emoji2, role2),(emoji3, role3),(emoji4, role4),(emoji5, role5)]:
-        if e and r:
-            roles[e] = r.id
+    modal = FullModal("Create Reaction Roles")
+    await interaction.response.send_modal(modal)
+    await modal.wait()
+
+    v = modal.value
 
     data["roles"][name] = {
-        "title": title,
-        "description": description,
-        "roles": roles,
-        "image": image,
-        "thumbnail": thumbnail,
-        "color": int(color.replace("#",""),16) if color else 0xFFFFFF,
+        "title": v["title"],
+        "description": v["description"],
+        "color": int(v["color"].replace("#",""),16) if v["color"] else 0xFFFFFF,
+        "image": v["image"],
+        "thumbnail": v["thumbnail"],
+        "roles": {},
         "messages": []
     }
 
     save(data)
-    await interaction.response.send_message(f"✅ Created `{name}`", ephemeral=True)
+    await interaction.followup.send(f"✅ Created `{name}`", ephemeral=True)
 
 # =========================
-# SEND RR
+# REACTION ROLES SEND
 # =========================
 @bot.tree.command(name="reactionroles_send")
+@app_commands.autocomplete(name=rr_autocomplete)
 async def rr_send(interaction: discord.Interaction, name: str, channel: discord.TextChannel):
-
-    if name not in data["roles"]:
-        return await interaction.response.send_message("❌ Not found", ephemeral=True)
 
     cfg = data["roles"][name]
 
     embed = discord.Embed(title=cfg["title"], description=cfg["description"], color=cfg["color"])
-    if cfg["image"]: embed.set_image(url=cfg["image"])
-    if cfg["thumbnail"]: embed.set_thumbnail(url=cfg["thumbnail"])
+    if cfg["image"]:
+        embed.set_image(url=cfg["image"])
+    if cfg["thumbnail"]:
+        embed.set_thumbnail(url=cfg["thumbnail"])
 
     msg = await channel.send(embed=embed)
-
-    for e in cfg["roles"]:
-        await msg.add_reaction(e)
 
     cfg["messages"].append({"channel": channel.id, "message": msg.id})
     save(data)
 
-    await interaction.response.send_message("✅ Sent!", ephemeral=True)
+    await interaction.response.send_message("✅ Sent", ephemeral=True)
 
 # =========================
-# EDIT RR
+# REACTION ROLES EDIT
 # =========================
 @bot.tree.command(name="reactionroles_edit")
-async def rr_edit(interaction: discord.Interaction, name: str,
-                  title: str=None, description: str=None,
-                  emoji1: str=None, role1: discord.Role=None,
-                  emoji2: str=None, role2: discord.Role=None,
-                  emoji3: str=None, role3: discord.Role=None,
-                  emoji4: str=None, role4: discord.Role=None,
-                  emoji5: str=None, role5: discord.Role=None,
-                  image: str=None, thumbnail: str=None, color: str=None):
-
-    if name not in data["roles"]:
-        return await interaction.response.send_message("❌ Not found", ephemeral=True)
+@app_commands.autocomplete(name=rr_autocomplete)
+async def rr_edit(interaction: discord.Interaction, name: str):
 
     cfg = data["roles"][name]
 
-    if title: cfg["title"] = title
-    if description: cfg["description"] = description
-    if image is not None: cfg["image"] = image
-    if thumbnail is not None: cfg["thumbnail"] = thumbnail
-    if color: cfg["color"] = int(color.replace("#",""),16)
+    modal = FullModal("Edit Reaction Roles", {
+        "title": cfg["title"],
+        "description": cfg["description"],
+        "color": f"#{cfg['color']:06x}",
+        "image": cfg["image"],
+        "thumbnail": cfg["thumbnail"]
+    })
 
-    new_roles = {}
-    for e, r in [(emoji1, role1),(emoji2, role2),(emoji3, role3),(emoji4, role4),(emoji5, role5)]:
-        if e and r:
-            new_roles[e] = r.id
-    if new_roles:
-        cfg["roles"] = new_roles
+    await interaction.response.send_modal(modal)
+    await modal.wait()
 
-    # update all messages of THIS config only
+    v = modal.value
+
+    cfg["title"] = v["title"]
+    cfg["description"] = v["description"]
+    cfg["image"] = v["image"]
+    cfg["thumbnail"] = v["thumbnail"]
+    if v["color"]:
+        cfg["color"] = int(v["color"].replace("#",""),16)
+
     for m in cfg["messages"]:
         try:
             ch = bot.get_channel(m["channel"])
             msg = await ch.fetch_message(m["message"])
 
             embed = discord.Embed(title=cfg["title"], description=cfg["description"], color=cfg["color"])
-            if cfg["image"]: embed.set_image(url=cfg["image"])
-            if cfg["thumbnail"]: embed.set_thumbnail(url=cfg["thumbnail"])
+            if cfg["image"]:
+                embed.set_image(url=cfg["image"])
+            if cfg["thumbnail"]:
+                embed.set_thumbnail(url=cfg["thumbnail"])
 
             await msg.edit(embed=embed)
-            await msg.clear_reactions()
-            for e in cfg["roles"]:
-                await msg.add_reaction(e)
         except:
             pass
 
     save(data)
-    await interaction.response.send_message("✅ Updated!", ephemeral=True)
+    await interaction.followup.send("✅ Updated", ephemeral=True)
 
 # =========================
-# DELETE RR
-# =========================
-@bot.tree.command(name="reactionroles_delete")
-async def rr_delete(interaction: discord.Interaction, name: str):
-
-    if name not in data["roles"]:
-        return await interaction.response.send_message("❌ Not found", ephemeral=True)
-
-    for m in data["roles"][name]["messages"]:
-        try:
-            ch = bot.get_channel(m["channel"])
-            msg = await ch.fetch_message(m["message"])
-            await msg.delete()
-        except:
-            pass
-
-    del data["roles"][name]
-    save(data)
-
-    await interaction.response.send_message("🗑️ Deleted", ephemeral=True)
-
-# =========================
-# LIST RR
-# =========================
-@bot.tree.command(name="reactionroles_list")
-async def rr_list(interaction: discord.Interaction):
-    names = list(data["roles"].keys())
-    await interaction.response.send_message("\n".join(names) if names else "None", ephemeral=True)
-
-# =========================
-# EMBED SYSTEM
+# EMBED CREATE
 # =========================
 @bot.tree.command(name="embed_create")
-async def embed_create(interaction: discord.Interaction, name: str, title: str, description: str,
-                       image: str=None, thumbnail: str=None, color: str=None):
+async def embed_create(interaction: discord.Interaction, name: str):
+
+    modal = FullModal("Create Embed")
+    await interaction.response.send_modal(modal)
+    await modal.wait()
+
+    v = modal.value
 
     data["embeds"][name] = {
-        "title": title,
-        "description": description,
-        "image": image,
-        "thumbnail": thumbnail,
-        "color": int(color.replace("#",""),16) if color else 0xFFFFFF,
+        "title": v["title"],
+        "description": v["description"],
+        "color": int(v["color"].replace("#",""),16) if v["color"] else 0xFFFFFF,
+        "image": v["image"],
+        "thumbnail": v["thumbnail"],
         "messages": []
     }
 
     save(data)
-    await interaction.response.send_message(f"✅ Created embed `{name}`", ephemeral=True)
+    await interaction.followup.send(f"✅ Created `{name}`", ephemeral=True)
 
+# =========================
+# EMBED SEND
+# =========================
 @bot.tree.command(name="embed_send")
+@app_commands.autocomplete(name=embed_autocomplete)
 async def embed_send(interaction: discord.Interaction, name: str, channel: discord.TextChannel):
-
-    if name not in data["embeds"]:
-        return await interaction.response.send_message("❌ Not found", ephemeral=True)
 
     cfg = data["embeds"][name]
 
     embed = discord.Embed(title=cfg["title"], description=cfg["description"], color=cfg["color"])
-    if cfg["image"]: embed.set_image(url=cfg["image"])
-    if cfg["thumbnail"]: embed.set_thumbnail(url=cfg["thumbnail"])
+    if cfg["image"]:
+        embed.set_image(url=cfg["image"])
+    if cfg["thumbnail"]:
+        embed.set_thumbnail(url=cfg["thumbnail"])
 
     msg = await channel.send(embed=embed)
 
     cfg["messages"].append({"channel": channel.id, "message": msg.id})
     save(data)
 
-    await interaction.response.send_message("✅ Sent!", ephemeral=True)
+    await interaction.response.send_message("✅ Sent", ephemeral=True)
 
+# =========================
+# EMBED EDIT
+# =========================
 @bot.tree.command(name="embed_edit")
-async def embed_edit(interaction: discord.Interaction, name: str,
-                     title: str=None, description: str=None,
-                     image: str=None, thumbnail: str=None, color: str=None):
-
-    if name not in data["embeds"]:
-        return await interaction.response.send_message("❌ Not found", ephemeral=True)
+@app_commands.autocomplete(name=embed_autocomplete)
+async def embed_edit(interaction: discord.Interaction, name: str):
 
     cfg = data["embeds"][name]
 
-    if title: cfg["title"] = title
-    if description: cfg["description"] = description
-    if image is not None: cfg["image"] = image
-    if thumbnail is not None: cfg["thumbnail"] = thumbnail
-    if color: cfg["color"] = int(color.replace("#",""),16)
+    modal = FullModal("Edit Embed", {
+        "title": cfg["title"],
+        "description": cfg["description"],
+        "color": f"#{cfg['color']:06x}",
+        "image": cfg["image"],
+        "thumbnail": cfg["thumbnail"]
+    })
+
+    await interaction.response.send_modal(modal)
+    await modal.wait()
+
+    v = modal.value
+
+    cfg["title"] = v["title"]
+    cfg["description"] = v["description"]
+    cfg["image"] = v["image"]
+    cfg["thumbnail"] = v["thumbnail"]
+    if v["color"]:
+        cfg["color"] = int(v["color"].replace("#",""),16)
 
     for m in cfg["messages"]:
         try:
@@ -227,65 +270,19 @@ async def embed_edit(interaction: discord.Interaction, name: str,
             msg = await ch.fetch_message(m["message"])
 
             embed = discord.Embed(title=cfg["title"], description=cfg["description"], color=cfg["color"])
-            if cfg["image"]: embed.set_image(url=cfg["image"])
-            if cfg["thumbnail"]: embed.set_thumbnail(url=cfg["thumbnail"])
+            if cfg["image"]:
+                embed.set_image(url=cfg["image"])
+            if cfg["thumbnail"]:
+                embed.set_thumbnail(url=cfg["thumbnail"])
 
             await msg.edit(embed=embed)
         except:
             pass
 
     save(data)
-    await interaction.response.send_message("✅ Updated!", ephemeral=True)
-
-@bot.tree.command(name="embed_delete")
-async def embed_delete(interaction: discord.Interaction, name: str):
-
-    if name not in data["embeds"]:
-        return await interaction.response.send_message("❌ Not found", ephemeral=True)
-
-    for m in data["embeds"][name]["messages"]:
-        try:
-            ch = bot.get_channel(m["channel"])
-            msg = await ch.fetch_message(m["message"])
-            await msg.delete()
-        except:
-            pass
-
-    del data["embeds"][name]
-    save(data)
-
-    await interaction.response.send_message("🗑️ Deleted", ephemeral=True)
-
-@bot.tree.command(name="embed_list")
-async def embed_list(interaction: discord.Interaction):
-    names = list(data["embeds"].keys())
-    await interaction.response.send_message("\n".join(names) if names else "None", ephemeral=True)
+    await interaction.followup.send("✅ Updated", ephemeral=True)
 
 # =========================
-# REACTIONS
+# RUN
 # =========================
-@bot.event
-async def on_raw_reaction_add(payload):
-    for cfg in data["roles"].values():
-        for m in cfg["messages"]:
-            if m["message"] == payload.message_id:
-                guild = bot.get_guild(payload.guild_id)
-                member = guild.get_member(payload.user_id)
-                if member.bot: return
-                role_id = cfg["roles"].get(str(payload.emoji))
-                if role_id:
-                    await member.add_roles(guild.get_role(role_id))
-
-@bot.event
-async def on_raw_reaction_remove(payload):
-    for cfg in data["roles"].values():
-        for m in cfg["messages"]:
-            if m["message"] == payload.message_id:
-                guild = bot.get_guild(payload.guild_id)
-                member = guild.get_member(payload.user_id)
-                role_id = cfg["roles"].get(str(payload.emoji))
-                if role_id:
-                    await member.remove_roles(guild.get_role(role_id))
-
-import os
 bot.run(os.getenv("TOKEN"))
